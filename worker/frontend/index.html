@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>在线24点（登录 / 每日十题 / 排行 / 联机）</title>
+<style>
+:root{ color-scheme:dark light; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+body{ max-width: 900px; margin: 0 auto; padding: 16px; }
+header{ display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:16px;}
+.card{ border:1px solid #8884; border-radius:12px; padding:12px; margin:10px 0;}
+.row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+input,button,select{ padding:8px 10px; border-radius:8px; border:1px solid #8886; background: transparent; color: inherit; }
+table{ width:100%; border-collapse: collapse; }
+th,td{ border-bottom: 1px solid #8884; padding:6px 8px; text-align:left; }
+.tabbar button{ padding:8px 14px;}
+.tabbar button.active{ background:#8882; }
+.badge{ padding:2px 6px; border-radius:6px; background:#8883; }
+</style>
+</head>
+<body>
+<header>
+  <div><strong>在线24点</strong> <span class="badge">Beta</span></div>
+  <div id="userbar" class="row">
+    <span id="userinfo">未登录</span>
+    <button id="btn-login">登录</button>
+    <button id="btn-logout" style="display:none">退出</button>
+  </div>
+</header>
+
+<div class="tabbar row">
+  <button data-tab="practice" class="active">练习</button>
+  <button data-tab="daily">每日十题</button>
+  <button data-tab="rank">排行榜</button>
+  <button data-tab="online">联机</button>
+</div>
+
+<section id="tab-practice" class="card">
+  <h3>练习模式</h3>
+  <div class="row">
+    <button id="pr-new">生成题目</button>
+    <span id="pr-nums"></span>
+    <button id="pr-show">查看解答（展示占位）</button>
+  </div>
+  <div class="row">
+    <label>用时（秒）<input id="pr-sec" type="number" value="30"></label>
+    <label>是否正确
+      <select id="pr-corr"><option value="1">正确</option><option value="0">错误</option></select>
+    </label>
+    <button id="pr-submit">提交记录</button>
+  </div>
+</section>
+
+<section id="tab-daily" class="card" style="display:none">
+  <h3>积分模式 · 每日十题</h3>
+  <div id="daily-box"></div>
+  <button id="daily-load">载入今日题目</button>
+  <button id="daily-submit" disabled>提交 10/10</button>
+  <div id="daily-msg"></div>
+</section>
+
+<section id="tab-rank" class="card" style="display:none">
+  <h3>排行榜</h3>
+  <div class="row">
+    <button id="rank-global">总分榜</button>
+    <button id="rank-daily">今日日榜</button>
+  </div>
+  <table id="rank-table"><thead><tr><th>#</th><th>用户名</th><th>分数</th></tr></thead><tbody></tbody></table>
+</section>
+
+<section id="tab-online" class="card" style="display:none">
+  <h3>多人联机（房间）</h3>
+  <div class="row">
+    <input id="room-id" placeholder="房间号，留空为 public">
+    <button id="room-join">加入/创建房间</button>
+    <button id="room-start">开始一局</button>
+  </div>
+  <div id="room-log" style="min-height:100px"></div>
+</section>
+
+<!-- 登录对话框（极简） -->
+<div id="dlg" class="card" style="display:none; position:fixed; inset:20% 10% auto 10%; background:canvas; box-shadow:0 10px 40px #0004">
+  <h3>登录 / 注册</h3>
+  <div class="row">
+    <input id="lg-user" placeholder="用户名">
+    <input id="lg-pass" type="password" placeholder="密码">
+    <button id="lg-do-login">登录</button>
+    <button id="lg-do-reg">注册</button>
+    <button id="lg-close">关闭</button>
+  </div>
+  <div id="lg-msg"></div>
+</div>
+
+<script>
+const API = location.origin; // 同域
+const $ = (s)=>document.querySelector(s);
+const userinfo = $("#userinfo");
+async function refreshMe(){
+  const r = await fetch(API+"/api/me", {credentials:"include"}).then(r=>r.json());
+  if (r.user){
+    userinfo.textContent = `${r.user.username} · 总分 ${r.user.totalScore} · Elo ${Math.round(r.user.elo)}`;
+    $("#btn-login").style.display="none";
+    $("#btn-logout").style.display="";
+  }else{
+    userinfo.textContent = "未登录";
+    $("#btn-login").style.display="";
+    $("#btn-logout").style.display="none";
+  }
+}
+$("#btn-login").onclick=()=> $("#dlg").style.display="";
+$("#lg-close").onclick=()=> $("#dlg").style.display="none";
+$("#lg-do-login").onclick=async ()=>{
+  const body = { username: $("#lg-user").value.trim(), password: $("#lg-pass").value };
+  const r = await fetch(API+"/api/login",{method:"POST", body: JSON.stringify(body), headers:{'Content-Type':'application/json'}, credentials:'include'}).then(r=>r.json());
+  $("#lg-msg").textContent = r.error||"登录成功"; if(!r.error){ $("#dlg").style.display="none"; refreshMe(); }
+};
+$("#lg-do-reg").onclick=async ()=>{
+  const body = { username: $("#lg-user").value.trim(), password: $("#lg-pass").value };
+  const r = await fetch(API+"/api/register",{method:"POST", body: JSON.stringify(body), headers:{'Content-Type':'application/json'}, credentials:'include'}).then(r=>r.json());
+  $("#lg-msg").textContent = r.error||"注册成功"; if(!r.error){ $("#dlg").style.display="none"; refreshMe(); }
+};
+$("#btn-logout").onclick=async ()=>{ await fetch(API+"/api/logout",{method:"POST", credentials:'include'}); refreshMe(); };
+
+// Tabs
+document.querySelectorAll(".tabbar button").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll(".tabbar button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    const tab = b.dataset.tab;
+    ["practice","daily","rank","online"].forEach(t=> $("#tab-"+t).style.display = (t===tab?"":"none"));
+  };
+});
+
+// Practice
+function randomNums(){ return Array.from({length:4}, ()=> 1 + Math.floor(Math.random()*13)); }
+let prNums = randomNums(), prPar = 12;
+$("#pr-new").onclick=()=>{ prNums = randomNums(); $("#pr-nums").textContent = prNums.join(", "); };
+$("#pr-show").onclick=()=> alert("这里显示解答（占位，前端可接你已有求解器）");
+$("#pr-submit").onclick=async ()=>{
+  const usedSec = Number($("#pr-sec").value||"0");
+  const correct = $("#pr-corr").value==="1";
+  const seed = "practice:"+Date.now();
+  await fetch(API+"/api/practice/submit", {method:"POST", credentials:"include",
+    headers:{'Content-Type': 'application/json'},
+    body: JSON.stringify({ seed, usedSec, correct, par: prPar })
+  }).then(r=>r.json()).then(x=> alert(x.error||"记录成功"));
+};
+
+// Daily
+let dailyData=null, dailyRecords = Array.from({length:10}, (_,i)=>({questionIndex:i, usedSec:30, correct:false, par:10}));
+$("#daily-load").onclick=async ()=>{
+  dailyData = await fetch(API+"/api/daily").then(r=>r.json());
+  const box = $("#daily-box"); box.innerHTML="";
+  dailyRecords = dailyData.questions.map((q,i)=>({questionIndex:i, usedSec:30, correct:false, par:q.par}));
+  dailyData.questions.forEach((q,i)=>{
+    const div = document.createElement("div"); div.className="row";
+    div.innerHTML = \`题\${i+1}: 数字 [\${q.nums.join(", ")}], PAR=\${q.par}
+      用时 <input type="number" value="30" style="width:70px"> 秒
+      正确?<select><option value="1">是</option><option value="0">否</option></select>\`;
+    const t = div.querySelector("input"); const s = div.querySelector("select");
+    t.oninput=()=>{ dailyRecords[i].usedSec = Number(t.value||"0"); };
+    s.onchange=()=>{ dailyRecords[i].correct = s.value==="1"; };
+    box.appendChild(div);
+  });
+  $("#daily-submit").disabled=false;
+};
+$("#daily-submit").onclick=async ()=>{
+  if(!dailyData) return;
+  const ymd = new Date().toISOString().slice(0,10);
+  const r = await fetch(API+"/api/daily/submit",{method:"POST", credentials:"include",
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ymd, records: dailyRecords })
+  }).then(r=>r.json());
+  $("#daily-msg").textContent = r.error ? ("提交失败："+r.error) : ("提交成功，总分 "+r.total);
+};
+
+// Rank
+$("#rank-global").onclick=async ()=>{
+  const data = await fetch(API+"/api/leaderboard/global").then(r=>r.json());
+  renderRank(data.list.map((x)=>({username:x.username, score:x.total_score})));
+};
+$("#rank-daily").onclick=async ()=>{
+  const data = await fetch(API+"/api/leaderboard/daily").then(r=>r.json());
+  renderRank(data.list.map((x)=>({username:x.username, score:x.score})));
+};
+function renderRank(list){
+  const tb = $("#rank-table tbody"); tb.innerHTML="";
+  list.forEach((r,i)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = \`<td>\${i+1}</td><td>\${r.username}</td><td>\${r.score}</td>\`;
+    tb.appendChild(tr);
+  });
+}
+
+// Online room
+let ws=null;
+$("#room-join").onclick=()=>{
+  const rid = $("#room-id").value.trim() || "public";
+  ws = new WebSocket(API.replace("http","ws") + "/ws?room="+encodeURIComponent(rid));
+  ws.onmessage = (ev)=>{
+    const m = JSON.parse(ev.data);
+    $("#room-log").innerHTML += "<div>"+JSON.stringify(m)+"</div>";
+  };
+};
+$("#room-start").onclick=()=>{ if(ws) ws.send(JSON.stringify({type:"start"})); };
+
+// init
+refreshMe();
+$("#pr-new").click();
+</script>
+</body>
+</html>

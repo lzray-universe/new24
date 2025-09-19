@@ -2,15 +2,18 @@ name = "twentyfour-worker"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 
+# === D1 ===
 [[d1_databases]]
-binding = "new24"
-database_name = "twentyfour-db"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+binding = "DB"
+database_name = "new24"                     # 必须是 new24
+database_id = "af3404de-ea2c-4ddb-aefd-8cb7695fc80c"
 
+# === KV ===
 [[kv_namespaces]]
 binding = "DAILY_KV"
-id = "REPLACE_WITH_YOUR_KV_ID"
+id = "06c300ed6078420e994c248036848a49"
 
+# === Durable Objects (bindings) ===
 [[durable_objects.bindings]]
 name = "ROOM_DO"
 class_name = "RoomDO"
@@ -23,5 +26,11 @@ class_name = "SessionDO"
 name = "LEADERBOARD_DO"
 class_name = "LeaderboardDO"
 
+# === CRON ===
 [triggers]
 crons = ["0 0 * * *"]
+
+# === Durable Objects Migrations (首次必须有) ===
+[[migrations]]
+tag = "v1"
+new_classes = [ "RoomDO", "SessionDO", "LeaderboardDO" ]

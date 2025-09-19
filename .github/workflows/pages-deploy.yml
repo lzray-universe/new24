@@ -1,0 +1,22 @@
+name: Deploy Pages (frontend)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/pages-deploy.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken:  ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          projectName: ${{ secrets.CF_PAGES_PROJECT }}
+          directory: frontend
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

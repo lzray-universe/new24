@@ -1,6 +1,8 @@
 
 (() => {
-  const API = location.origin;
+  const API = (typeof WORKER_BASE !== "undefined" && WORKER_BASE)
+    || (typeof window !== "undefined" && typeof window.WORKER_BASE === "string" && window.WORKER_BASE)
+    || location.origin;
   function h(tag, attrs={}, ...kids){
     const el = document.createElement(tag);
     Object.entries(attrs||{}).forEach(([k,v])=>{

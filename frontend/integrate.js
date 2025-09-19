@@ -14,7 +14,20 @@
   async function fetchJSON(url, opt={}){
     const r = await fetch(url, { credentials:"include", ...opt });
     const t = await r.text();
-    try { return JSON.parse(t); } catch { return {error:"bad json", raw:t}; }
+    const trimmed = t.trim();
+    if(!r.ok){
+      if(trimmed){
+        try {
+          const data = JSON.parse(t);
+          if(data && typeof data === "object") return data;
+        } catch {}
+        return {error:trimmed};
+      }
+      return {error:r.statusText || `HTTP ${r.status}`};
+    }
+    if(!trimmed) return {};
+    try { return JSON.parse(t); }
+    catch { return {message:trimmed}; }
   }
   function showToast(msg){
     const div = h("div",{style:{position:"fixed",left:"50%",top:"20px",transform:"translateX(-50%)",
@@ -25,14 +38,22 @@
   }
 
   // Floating panel
+  function panelTheme(){
+    const light = document.body.getAttribute("data-theme") === "light";
+    return {
+      bg: light ? "rgba(0,0,0,.04)" : "rgba(255,255,255,.06)",
+      border: light ? "1px solid rgba(0,0,0,.08)" : "1px solid rgba(255,255,255,.12)"
+    };
+  }
   const panel = h("div", {id:"overlay24", style:{
-    position:"fixed", right:"16px", bottom:"16px", width:"320px", maxHeight:"70vh",
-    overflow:"auto", background:"rgba(20,22,25,.85)", backdropFilter:"blur(6px)",
-    color:"#fff", border:"1px solid #8884", borderRadius:"12px", padding:"12px", zIndex:999999
+    width:"100%", boxSizing:"border-box", margin:"0 0 16px", padding:"12px",
+    backdropFilter:"blur(10px)", color:"var(--fg)", borderRadius:"12px",
+    boxShadow:"0 10px 30px rgba(0,0,0,.12)"
   }});
+  const closeBtn = h("button",{id:"ov-close", style:{background:"transparent", color:"inherit", borderRadius:"8px", padding:"2px 8px"}, onclick:()=>panel.remove()},"×");
   const title = h("div",{style:{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px"}},
     h("strong",{},"24点 · 登录/每日/排行/联机"),
-    h("button",{id:"ov-close", style:{background:"transparent", border:"1px solid #8886", color:"inherit", borderRadius:"8px", padding:"2px 8px"}, onclick:()=>panel.remove()},"×")
+    closeBtn
   );
   const userBar = h("div",{id:"ov-user", style:{margin:"6px 0"}},"未登录");
   const loginRow = h("div",{style:{display:"flex", gap:"6px", marginBottom:"8px"}},
@@ -43,12 +64,12 @@
     h("button",{onclick:async()=>{
       const body = JSON.stringify({username:document.getElementById("ov-usern").value.trim(), password:document.getElementById("ov-pass").value});
       const r = await fetchJSON(API+"/api/login",{method:"POST", headers:{'Content-Type':'application/json'}, body});
-      showToast(r.error||"登录成功"); if(!r.error) refreshMe();
+      showToast(r.error||r.message||"登录成功"); if(!r.error) refreshMe();
     }},"登录"),
     h("button",{onclick:async()=>{
       const body = JSON.stringify({username:document.getElementById("ov-usern").value.trim(), password:document.getElementById("ov-pass").value});
       const r = await fetchJSON(API+"/api/register",{method:"POST", headers:{'Content-Type':'application/json'}, body});
-      showToast(r.error||"注册成功"); if(!r.error) refreshMe();
+      showToast(r.error||r.message||"注册成功"); if(!r.error) refreshMe();
     }},"注册"),
     h("button",{onclick:async()=>{await fetchJSON(API+"/api/logout",{method:"POST"}); refreshMe();}},"退出")
   );
@@ -60,8 +81,25 @@
   );
   const box = h("div",{id:"ov-box"});
   panel.append(title, userBar, loginRow, actRow, tabs, box);
-  document.addEventListener("keydown", (e)=>{ if(e.key==="F10"){ if(document.getElementById("overlay24")) panel.remove(); else document.body.append(panel);} });
-  document.body.append(panel);
+  const tabsHost = document.querySelector(".tabs");
+  const container = tabsHost ? tabsHost.parentNode : document.body;
+  function applyPanelTheme(){
+    const {bg, border} = panelTheme();
+    panel.style.background = bg;
+    panel.style.border = border;
+    closeBtn.style.border = border;
+  }
+  function attachPanel(){
+    if(!panel.parentNode){
+      if(tabsHost) container.insertBefore(panel, tabsHost);
+      else container.prepend(panel);
+    }
+    applyPanelTheme();
+  }
+  attachPanel();
+  const themeObserver = new MutationObserver(applyPanelTheme);
+  themeObserver.observe(document.body, {attributes:true, attributeFilter:["data-theme"]});
+  document.addEventListener("keydown", (e)=>{ if(e.key==="F10"){ if(panel.parentNode) panel.remove(); else attachPanel(); } });
 
   async function refreshMe(){
     const r = await fetchJSON(API+"/api/me");
